@@ -59,7 +59,7 @@ curl -X POST http://localhost:38383/run \
 
 - **Zero dependencies** — plain `java.net.ServerSocket`, no web framework, no reflection hacks.
 - **Full LuaJ JSE platform** — `luajava.bindClass`, `CoerceJavaToLua`, coroutines, io, os.
-- **Classloader-aware Java bridge** — `bind("androidx.work.WorkManager")` resolves through the app's own classloader, so AndroidX + app classes work from Lua (plain `luajava.bindClass` fails on Android daemon threads).
+- **Classloader-aware Java bridge** — `bind("androidx.work.WorkManager")` resolves through the app's own classloader, so AndroidX + app classes work from Lua (plain `luajava.bindClass` fails on Android daemon threads). Implemented in `JavaBridge.kt` — a pure-JVM core with a **TDD suite** (`test/JavaBridgeTest.kt`, 7 tests, `./gradlew test`): bind through loader, no-arg/string ctors, inner `Builder` classes, nil-not-throw on missing class/ctor, method chaining.
 - **Reliable construction** — `new(clazz)` helper instantiates classes including inner classes (`Data$Builder`).
 - **Live app context** — `context`, `files`, `cache` globals pre-bound to the running app.
 - **Shell escape hatch** — `exec(cmd)` for anything Lua can't reach.
