@@ -1,0 +1,10 @@
+{
+  "name": "@android-fleet/luaj-dropin",
+  "version": "1.0.0",
+  "description": "Drop-in LuaJ remote control plane & hot-reload server for any Android APK",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "bun bin/build.ts",
+    "patch": "bun bin/patch-apk.ts"
+  }
+}
