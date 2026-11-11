@@ -52,21 +52,21 @@ object JavaBridge {
         globals.set("new", object : VarArgFunction() {
             override fun invoke(args: Varargs): Varargs {
                 return try {
-                    // LuaJ passes LuaValue userdata, not the raw Class —
-                    // `as? Class<*>` on the LuaValue silently fails. Unwrap.
-                    val clazz = args.arg(1).touserdata() as? Class<*> ?: return LuaValue.NIL
-                    val ctorArgs = (2..args.narg()).map { args.arg(it).checkjstring() }
-                    val ctor = if (ctorArgs.isEmpty()) {
-                        clazz.getConstructor()
-                    } else {
-                        clazz.getConstructor(*Array(ctorArgs.size) { String::class.java })
+                    // LuaJ's NATIVE constructor path (reverse-engineered from
+                    // JavaClass bytecode): the method map keys constructors
+                    // under "new" — `Class.new(args)` invokes a JavaConstructor
+                    // Overload with full CoerceLuaToJava arg coercion (strings,
+                    // Classes, numbers). Our earlier reflection-based helper was
+                    // redundant and broke on Class-typed ctors; the native path
+                    // handles Data$Builder (no-arg) AND
+                    // WorkRequest$Builder(WorkerClass) correctly.
+                    val cls = args.arg(1)
+                    val ctor = cls.get("new")
+                    if (ctor.isnil()) {
+                        log("-- new() failed: no public constructor on ${cls.tojstring()}")
+                        return LuaValue.NIL
                     }
-                    val instance = if (ctor.parameterCount == 0) {
-                        ctor.newInstance()
-                    } else {
-                        ctor.newInstance(*ctorArgs.toTypedArray())
-                    }
-                    CoerceJavaToLua.coerce(instance)
+                    ctor.invoke(args.subargs(2))
                 } catch (e: Throwable) {
                     log("-- new() failed: ${e.message}")
                     LuaValue.NIL

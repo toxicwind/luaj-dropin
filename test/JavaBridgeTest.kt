@@ -39,6 +39,12 @@ class JavaBridgeTest {
         }
     }
 
+    /** Target for the class-typed ctor test. */
+    class Target
+
+    /** Holder whose ctor takes a Class — mirrors WorkRequest$Builder(WorkerClass). */
+    class ClassCtorHolder(val clazz: Class<*>)
+
     private fun globalsWithBridge(): Pair<Globals, StringBuilder> {
         val globals = JsePlatform.standardGlobals()
         val log = StringBuilder()
@@ -115,6 +121,21 @@ class JavaBridgeTest {
         """)
         assertTrue(res.isnil(), "no-ctor class must be nil")
         assertTrue(log.contains("new() failed"), "should log the failure")
+    }
+
+    @Test
+    fun `new with a Class arg uses the class-typed ctor`() {
+        val (g, _) = globalsWithBridge()
+        // SampleOuter$Builder's ctor is no-arg; use a class-typed ctor case:
+        // a holder class whose ctor takes a Class (mirrors WorkRequest$Builder(WorkerClass)).
+        val holder = runLua(g, """
+            local Holder = bind("net.luaj.dropin.JavaBridgeTest${'$'}ClassCtorHolder")
+            local Target = bind("net.luaj.dropin.JavaBridgeTest${'$'}Target")
+            local h = new(Holder, Target)
+            return h
+        """)
+        val instance = holder.touserdata() as? ClassCtorHolder
+        assertEquals(Target::class.java, instance?.clazz)
     }
 
     @Test
