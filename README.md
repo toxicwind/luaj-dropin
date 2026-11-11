@@ -109,6 +109,36 @@ See [examples/](examples/) for runnable scripts:
 - [ ] WebSocket streaming console
 - [ ] Auth token support
 
+## ⚠️ Disclaimer (read before use)
+
+**This tool is a remote code execution plane.** The `/run` endpoint executes
+arbitrary Lua with full access to the app's process: every Java/Kotlin class,
+the SQLite database, SharedPreferences, the filesystem, and `exec()` as the
+app UID. Anyone with network reach to the bound port can:
+
+- read or modify the app's data (credentials, tokens, databases)
+- execute shell commands as the app's user
+- trigger any app API (playback, recording, purchases, account changes)
+
+**By using this project you acknowledge:**
+
+1. **Debug-only.** It is designed exclusively for development, testing, and
+   reverse-engineering of YOUR OWN applications and devices. It must never be
+   shipped in a production build, published to a store, or left running on a
+   device you do not own.
+2. **No warranty.** The software is provided "AS IS", without warranty of any
+   kind. The author is not liable for any damage, data loss, or misuse.
+3. **Your responsibility.** You are solely responsible for how this tool is
+   used and for securing the endpoint (firewall, adb reverse only, no public
+   exposure). Exposing `:38383` to an untrusted network is equivalent to
+   publishing a root shell on that port.
+4. **No circumvention endorsement.** Nothing here is intended to bypass DRM,
+   licensing, or access controls on content or services you do not own. Use
+   against your own hardware and accounts only.
+
+This disclaimer mirrors the practice of similar tooling (Shizuku/rish, Frida,
+Objection): the capability is neutral, the deployment is yours.
+
 ## Contributing
 
 Contributions are what make the open-source community such an amazing place — read [CONTRIBUTING.md](CONTRIBUTING.md) and jump in.
