@@ -9,4 +9,4 @@
 *.secret
 .env
 .env.*
-!*.example
+!*.example.github/workflows/ci.yml
