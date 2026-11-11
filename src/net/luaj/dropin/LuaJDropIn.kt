@@ -1,6 +1,7 @@
 package net.luaj.dropin
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -39,6 +40,13 @@ object LuaJDropIn {
 
     fun start(context: Context, port: Int = defaultPort) {
         if (serverSocket != null) return
+        // Debug-only by design: no-op in release builds so the control plane never ships.
+        // Uses FLAG_DEBUGGABLE (works without BuildConfig) so it's a true drop-in.
+        val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!debuggable) {
+            Log.w(TAG, "LuaJDropIn.start() ignored — app is not debuggable (release build).")
+            return
+        }
         this.appContext = context.applicationContext
         this.defaultPort = port
 
