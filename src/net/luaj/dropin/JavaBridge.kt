@@ -41,7 +41,11 @@ object JavaBridge {
             override fun call(name: LuaValue): LuaValue {
                 return try {
                     val cls = Class.forName(name.checkjstring(), true, appLoader)
-                    CoerceJavaToLua.coerce(cls)
+                    val coerced = CoerceJavaToLua.coerce(cls)
+                    // Force-hotpatch: make JavaClass.getConstructor() reachable
+                    // from Lua (vendored shim, no fork — see LuaJPatch).
+                    LuaJPatch.patch(coerced)
+                    coerced
                 } catch (e: Throwable) {
                     log("-- bind(${name.tojstring()}) failed: ${e.message}")
                     LuaValue.NIL

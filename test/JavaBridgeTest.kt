@@ -139,6 +139,41 @@ class JavaBridgeTest {
     }
 
     @Test
+    fun `LuaJPatch makes getConstructor reachable as the devs intended`() {
+        val (g, _) = globalsWithBridge()
+        // The shim patches bind()'d JavaClass: `Holder["getConstructor"]` must
+        // now return the callable helper, and invoking it with a Class arg must
+        // construct (the WorkRequest$Builder(WorkerClass) shape).
+        // NOTE: bracket access, NOT colon — `Holder:getConstructor()` passes
+        // self as an extra arg which the JavaConstructor Overload rejects
+        // ("attempt to call userdata"). Proven empirically.
+        val holder = runLua(g, """
+            local Holder = bind("net.luaj.dropin.JavaBridgeTest${'$'}ClassCtorHolder")
+            local Target = bind("net.luaj.dropin.JavaBridgeTest${'$'}Target")
+            local ctor = Holder["getConstructor"]
+            local h = ctor(Target)
+            return h
+        """)
+        val instance = holder.touserdata() as? ClassCtorHolder
+        assertEquals(Target::class.java, instance?.clazz)
+    }
+
+    @Test
+    fun `LuaJPatch getConstructor works on inner Builder`() {
+        val (g, _) = globalsWithBridge()
+        val builder = runLua(g, """
+            local Builder = bind("net.luaj.dropin.JavaBridgeTest${'$'}SampleOuter${'$'}Builder")
+            local ctor = Builder["getConstructor"]
+            local b = ctor()
+            b:put("x", "1")
+            local outer = b:build()
+            return outer
+        """)
+        val instance = builder.touserdata() as? SampleOuter
+        assertEquals("x=1;", instance?.value)
+    }
+
+    @Test
     fun `instance methods chain through luajava`() {
         val (g, _) = globalsWithBridge()
         val sb = runLua(g, """
