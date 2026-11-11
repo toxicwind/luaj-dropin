@@ -10,3 +10,7 @@
 .env
 .env.*
 !*.example.github/workflows/ci.yml
+
+# Gradle
+.gradle/
+build/
