@@ -56,21 +56,32 @@ object JavaBridge {
         globals.set("new", object : VarArgFunction() {
             override fun invoke(args: Varargs): Varargs {
                 return try {
-                    // LuaJ's NATIVE constructor path (reverse-engineered from
-                    // JavaClass bytecode): the method map keys constructors
-                    // under "new" — `Class.new(args)` invokes a JavaConstructor
-                    // Overload with full CoerceLuaToJava arg coercion (strings,
-                    // Classes, numbers). Our earlier reflection-based helper was
-                    // redundant and broke on Class-typed ctors; the native path
-                    // handles Data$Builder (no-arg) AND
-                    // WorkRequest$Builder(WorkerClass) correctly.
                     val cls = args.arg(1)
-                    val ctor = cls.get("new")
-                    if (ctor.isnil()) {
-                        log("-- new() failed: no public constructor on ${cls.tojstring()}")
-                        return LuaValue.NIL
+                    // LuaJ's Overload picks the LOWEST-scoring ctor; for
+                    // WorkRequest$Builder the no-arg ctor (score 0) beats the
+                    // (Class) ctor (score 1), so Class-typed construction
+                    // silently picks the wrong overload. Bypass the Overload:
+                    // resolve the exact ctor by param types via reflection.
+                    val clazz = cls.touserdata() as? Class<*> ?: return LuaValue.NIL
+                    val ctorArgs = (2..args.narg()).map { args.arg(it) }
+                    val ctor = if (ctorArgs.isEmpty()) {
+                        clazz.getConstructor()
+                    } else {
+                        // Match param types: Class for JavaClass userdata,
+                        // String for strings, else Object.
+                        val types = ctorArgs.map { v ->
+                            when {
+                                v.touserdata() is Class<*> -> Class::class.java
+                                v.type() == LuaValue.TSTRING -> String::class.java
+                                else -> Any::class.java
+                            }
+                        }.toTypedArray()
+                        clazz.getConstructor(*types)
                     }
-                    ctor.invoke(args.subargs(2))
+                    val javaArgs = ctorArgs.map { v ->
+                        v.touserdata() as? Class<*> ?: v.checkjstring()
+                    }.toTypedArray()
+                    CoerceJavaToLua.coerce(ctor.newInstance(*javaArgs))
                 } catch (e: Throwable) {
                     log("-- new() failed: ${e.message}")
                     LuaValue.NIL
