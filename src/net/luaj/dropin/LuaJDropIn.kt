@@ -166,7 +166,9 @@ object LuaJDropIn {
                 globals.set("new", object : VarArgFunction() {
                     override fun invoke(args: Varargs): Varargs {
                         return try {
-                            val clazz = args.arg(1) as? Class<*> ?: return LuaValue.NIL
+                            // LuaJ passes LuaValue userdata, not the raw Class —
+                            // `as? Class<*>` on the LuaValue silently fails. Unwrap.
+                            val clazz = args.arg(1).touserdata() as? Class<*> ?: return LuaValue.NIL
                             val ctorArgs = (2..args.narg()).map { args.arg(it).checkjstring() }
                             // First try no-arg, then string-arg constructors.
                             val ctor = try {
