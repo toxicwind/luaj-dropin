@@ -1,23 +1,38 @@
-# LuaJDropIn
-
 <div align="center">
+
+# 🚀 LuaJDropIn
+
+**One line of Kotlin. Full remote control of any Android app.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-green.svg?style=for-the-badge)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Android%207%2B-orange.svg?style=for-the-badge)](docs/)
+[![Tests](https://img.shields.io/badge/tests-9%2F9-brightgreen.svg?style=for-the-badge)](test/JavaBridgeTest.kt)
 [![Lua](https://img.shields.io/badge/LuaJ-3.0.1-purple.svg?style=for-the-badge)](docs/API.md)
+
+**Run Lua against a live Android app — over HTTP. No rebuild. No root. No Frida.**
+
+<p align="center">
+  <img src="docs/demo.png" alt="LuaJDropIn demo — live session against an Android app" width="860">
+</p>
 
 </div>
 
-## One line of Kotlin. Full remote control of any Android app.
+---
 
-**LuaJDropIn** embeds a zero-dependency HTTP + LuaJ runtime into any Android app. One line of Kotlin, one port, full remote control: run Lua scripts over HTTP against live app state — SQLite, SharedPreferences, classloaders, and any Java/Kotlin API via `luajava`.
+## Why?
 
-<p align="center">
-  ![LuaJDropIn demo](docs/demo.svg)
-</p>
+You're debugging an app on a device. You need to:
 
-## Quickstart
+- 🗄️ **Inspect or mutate SQLite** — without pulling the DB
+- 🔑 **Read SharedPreferences** — live, while the app is running
+- 🧪 **Call any Java/Kotlin API** — WorkManager, Room, your own classes
+- ⚡ **Hot-reload logic** — edit a `.lua` file, it's running on-device in 250ms
+- 🛠️ **Shell out** — as the app's own UID
+
+Normally that's an APK rebuild, an Frida script, or a rooted shell. **LuaJDropIn is one line of Kotlin and a `curl`.**
+
+## Quickstart (60 seconds)
 
 ### 1. Add the dependency
 
@@ -26,48 +41,75 @@
 implementation("org.luaj:luaj-jse:3.0.1")
 ```
 
-### 2. Copy one file
-
-Drop `src/net/luaj/dropin/LuaJDropIn.kt` into your module.
-
-### 3. Start it in Application.onCreate
+### 2. Drop in one file + one line
 
 ```kotlin
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
-        LuaJDropIn.start(this)          // binds :38383 (auto-increments if busy)
+        LuaJDropIn.start(this)          // ← that's the whole integration
     }
 }
 ```
 
-### 4. Control it over HTTP
+### 3. Control it from your machine
 
 ```bash
-# Status probe
+# Is it alive?
 curl http://localhost:38383/
+# → {"ok":true,"pkg":"com.example.app","pid":1234,"uid":10000}
 
-# Run any Lua script against the live app
+# Run Lua against the live app
 curl -X POST http://localhost:38383/run \
   -H 'Content-Type: application/json' \
   -d '{"script": "log(context.packageName)"}'
-
-# → {"ok":true,"output":"tv.own.owntv\n"}
+# → {"ok":true,"output":"com.example.app\n"}
 ```
 
-## Features
+### 4. Go deeper — SQLite, live
 
-- **Zero dependencies** — plain `java.net.ServerSocket`, no web framework, no reflection hacks.
-- **Full LuaJ JSE platform** — `luajava.bindClass`, `CoerceJavaToLua`, coroutines, io, os.
-- **Classloader-aware Java bridge** — `bind("androidx.work.WorkManager")` resolves through the app's own classloader, so AndroidX + app classes work from Lua (plain `luajava.bindClass` fails on Android daemon threads). Implemented in `JavaBridge.kt` — a pure-JVM core with a **TDD suite** (`test/JavaBridgeTest.kt`, 9 tests, `./gradlew test`): bind through loader, no-arg/string/class ctors, inner `Builder` classes, nil-not-throw on missing class/ctor, method chaining.
-- **Force-hotpatch shim (`LuaJPatch`)** — stock LuaJ has an unreachable `getConstructor()` helper (proven by bytecode RE). The vendored shim patches the JavaClass methods map at bind time so `Builder["getConstructor"](args)` works alongside native `Class.new(args)`. No fork, no jar surgery. See [docs/LuaJPatch.md](docs/LuaJPatch.md).
-- **Reliable construction** — `new(clazz)` helper instantiates classes including inner classes (`Data$Builder`).
-- **Live app context** — `context`, `files`, `cache` globals pre-bound to the running app.
-- **Shell escape hatch** — `exec(cmd)` for anything Lua can't reach.
-- **Console capture** — `log(...)` streams back to the HTTP response.
-- **Port auto-fallback** — binds `:38383`, walks up if taken.
-- **Custom globals** — `configureGlobals { ... }` to inject your own APIs.
-- **Auto-deploy watcher** — `bin/watch.ts` watches `lua/` + `src/`: Lua changes POST instantly, Kotlin changes rebuild + redeploy the APK, and **state restore** re-runs `lua/init.lua` after every relaunch.
+```lua
+-- read the app's own database
+local SQLiteDatabase = luajava.bindClass("android.database.sqlite.SQLiteDatabase")
+local db = SQLiteDatabase:openDatabase(context:getDatabasePath("app.db"):getPath(), nil, 0)
+local c = db:rawQuery("SELECT COUNT(*) FROM users", nil)
+c:moveToFirst()
+log("users: " .. c:getLong(0))
+db:close()
+```
+
+---
+
+## What you can do
+
+| Task | How |
+|---|---|
+| **Inspect SQLite** | `luajava` + `SQLiteDatabase` — read/write any table |
+| **Read/Write prefs** | `context:getSharedPreferences(...)` |
+| **Call app APIs** | `bind("com.your.app.SomeClass")` — every class reachable |
+| **Trigger WorkManager** | `bind("androidx.work.WorkManager"):getInstance(context)` |
+| **Shell out** | `exec("ls /data/data/" .. context.packageName)` |
+| **Hot-reload** | `bun bin/watch.ts` — edit `.lua`, deployed on save |
+| **After rebuild** | `lua/init.lua` runs automatically — state restored |
+
+## Why it works where others don't
+
+- **Zero dependencies** — plain `java.net.ServerSocket`. No web framework, no reflection hacks, no native code.
+- **Classloader-aware bridge** — `bind("androidx.work.WorkManager")` resolves through the app's own classloader. Plain `luajava.bindClass` fails on Android daemon threads; this doesn't.
+- **Force-hotpatch shim** — LuaJ ships an unreachable `getConstructor()` helper (proven by bytecode RE). `LuaJPatch` makes it work at bind time. No fork, no jar surgery.
+- **Port auto-fallback** — `:38383` taken? Walks up until it finds a free port.
+- **Debug-only by design** — never ship it. See the disclaimer below.
+
+## Auto-deploy watcher
+
+```bash
+bun bin/watch.ts                # watch lua/ + src/
+bun bin/watch.ts --no-source    # Lua only
+```
+
+- **Lua lane** — every `.lua` in `lua/` deploys on save (250ms debounce)
+- **Source lane** — any Kotlin change → `gradle assemble` → `adb push` → `pm install -r` → relaunch
+- **State restore** — a rebuild kills the Lua runtime. `lua/init.lua` runs first after every relaunch, rebuilding your state idempotently
 
 ## API
 
@@ -79,22 +121,9 @@ curl -X POST http://localhost:38383/run \
 
 Pre-bound globals: `context`, `files`, `cache`, `log(...)`, `exec(cmd)`, `bind(name)`, `new(clazz)`.
 
-## Auto-deploy watcher
-
-```bash
-bun bin/watch.ts                # watch lua/ + src/ (defaults)
-bun bin/watch.ts --no-source    # Lua only
-bun bin/watch.ts --no-lua       # source only
-bun bin/watch.ts --lua-dir lua --host http://127.0.0.1:38383
-```
-
-- **Lua lane**: every `.lua` in `lua/` deploys on save (250ms debounce). Files starting with `_` are skipped.
-- **Source lane**: any `.kt/.java/.xml/.kts` change → `gradle assembleStandardDebug` → `adb push` → `pm install -r` → relaunch (1.5s debounce).
-- **State restore**: a rebuild kills the Lua runtime state. `lua/init.lua` runs first at watch start AND after every relaunch — write it idempotently (dedupe profiles, insert missing sources, re-link). Then the remaining `.lua` files run in order.
+Full reference: [docs/API.md](docs/API.md) · [docs/LuaJPatch.md](docs/LuaJPatch.md)
 
 ## Examples
-
-See [examples/](examples/) for runnable scripts:
 
 - [status.lua](examples/status.lua) — probe the running app
 - [sqlite-inject.lua](examples/sqlite-inject.lua) — inject rows into a live Room/SQLite DB
@@ -105,8 +134,9 @@ See [examples/](examples/) for runnable scripts:
 
 - [x] HTTP server + Lua execution (`/status`, `/run`)
 - [x] Pre-bound app context + shell escape hatch
-- [x] Classloader-aware `bind()` + `new()` (AndroidX/app classes reachable)
-- [x] Auto-deploy watcher with state restore (`bin/watch.ts` + `lua/init.lua`)
+- [x] Classloader-aware `bind()` + `new()`
+- [x] Force-hotpatch shim (`LuaJPatch`)
+- [x] Auto-deploy watcher with state restore
 - [ ] WebSocket streaming console
 - [ ] Auth token support
 
@@ -150,7 +180,13 @@ Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
 
 ## Contact & Acknowledgments
 
-Maintainer: @toxicwind — open a [discussion](https://github.com/toxicwind/android-fleet/discussions).
+Maintainer: @toxicwind — open a [discussion](https://github.com/toxicwind/luaj-dropin/discussions) or [file an issue](https://github.com/toxicwind/luaj-dropin/issues).
+
+**Credits:**
+
+- **[LuaJ](https://github.com/luaj/luaj)** (MIT) — the pure-Java Lua 5.2 VM + `luajava` bridge this project rides on. No fork: the force-hotpatch shim works around a genuine gap in the stock library (see [docs/LuaJPatch.md](docs/LuaJPatch.md)).
+- **[Fengari](https://github.com/fengari-lua/fengari)** (MIT) — the JS Lua VM whose protocol insights informed the drop-in's design.
+- **Shizuku / rish, Frida, Objection** — the tooling whose disclaimer practice this project mirrors.
 
 ---
 

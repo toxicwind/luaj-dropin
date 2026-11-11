@@ -4,7 +4,7 @@
 
 Please **do not open a public issue** for security vulnerabilities. Report privately:
 
-- Open a [private security advisory](https://github.com/toxicwind/android-fleet/security/advisories/new)
+- Open a [private security advisory](https://github.com/toxicwind/luaj-dropin/security/advisories/new)
   (replace OWNER/REPO with the actual repo), or
 - Email the maintainer(s) directly.
 

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Discussions
-    url: https://github.com/toxicwind/android-fleet/discussions
+    url: https://github.com/toxicwind/luaj-dropin/discussions
     about: Ask questions and share ideas here.
   - name: LuaJDropIn docs
-    url: https://github.com/toxicwind/android-fleet/tree/main/products/luaj-dropin/docs
+    url: https://github.com/toxicwind/luaj-dropin/tree/main/docs
     about: Full API reference and integration guide.
