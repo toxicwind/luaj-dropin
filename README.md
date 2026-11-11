@@ -9,7 +9,7 @@
 
 </div>
 
-## Drop-in LuaJ remote control plane & hot-reload server for any Android APK
+## One line of Kotlin. Full remote control of any Android app.
 
 **LuaJDropIn** embeds a zero-dependency HTTP + LuaJ runtime into any Android app. One line of Kotlin, one port, full remote control: run Lua scripts over HTTP against live app state — SQLite, SharedPreferences, classloaders, and any Java/Kotlin API via `luajava`.
 

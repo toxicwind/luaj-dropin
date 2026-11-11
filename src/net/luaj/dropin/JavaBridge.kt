@@ -44,7 +44,7 @@ object JavaBridge {
                     val coerced = CoerceJavaToLua.coerce(cls)
                     // Force-hotpatch: make JavaClass.getConstructor() reachable
                     // from Lua (vendored shim, no fork — see LuaJPatch).
-                    LuaJPatch.patch(coerced)
+                    LuaJPatch.patch(coerced, log)
                     coerced
                 } catch (e: Throwable) {
                     log("-- bind(${name.tojstring()}) failed: ${e.message}")
