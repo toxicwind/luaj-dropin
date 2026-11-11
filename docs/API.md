@@ -9,6 +9,30 @@
 | `cache` | `java.io.File` | `context.cacheDir` |
 | `log(...)` | function | Appends args to response output + Logcat |
 | `exec(cmd)` | function | Runs `/system/bin/sh -c`, returns exit code, captures stdout+stderr |
+| `bind(name)` | function | Classloader-aware `Class.forName` — resolves AndroidX + app classes from Lua |
+| `new(clazz)` | function | Constructs a class instance (handles inner classes like `Data$Builder`) |
+
+## Classloader-aware bridge (`bind` / `new`)
+
+Plain `luajava.bindClass` uses the DEFAULT classloader, which on an Android
+daemon thread is the system loader — app/AndroidX classes fail with
+`ClassNotFoundException`. `bind(name)` resolves through the app's own
+classloader so EVERY class is reachable:
+
+```lua
+local WorkManager = bind("androidx.work.WorkManager")
+local wm = WorkManager:getInstance(context)
+wm:enqueueUniqueWork("catalog-sync-source-1", bind("androidx.work.ExistingWorkPolicy").REPLACE, request)
+```
+
+`new(clazz)` constructs instances reliably, including inner classes:
+
+```lua
+local DataBuilder = bind("androidx.work.Data$Builder")
+local d = new(DataBuilder)          -- no-arg constructor
+d:putLong("sourceId", 1)
+local payload = d:build()
+```
 
 ## HTTP Endpoints
 
@@ -44,6 +68,21 @@ LuaJDropIn.start(this, 40000)                   // custom port
 LuaJDropIn.configureGlobals { globals ->
     globals.set("myApi", CoerceJavaToLua.coerce(MyApi()))
 }
+```
+
+## Auto-deploy watcher + state restore
+
+`bin/watch.ts` closes the edit→deploy loop:
+
+- **Lua lane** — any `.lua` in `lua/` POSTs to `/run` on save (250ms debounce). `_`-prefixed files are skipped.
+- **Source lane** — any `.kt/.java/.xml/.kts` change triggers `gradle assembleStandardDebug` → `adb push` → `pm install -r` → relaunch (1.5s debounce).
+- **State restore** — a rebuild kills the Lua runtime state (globals, DB handles, listeners). After every relaunch the watcher polls the lane, then runs `lua/init.lua` FIRST (idempotent: dedupe profiles, insert missing sources, re-link), then the remaining `.lua` files in order.
+
+```bash
+bun bin/watch.ts                # both lanes
+bun bin/watch.ts --no-source    # Lua only
+bun bin/watch.ts --no-lua       # source only
+bun bin/watch.ts --lua-dir lua --host http://127.0.0.1:38383
 ```
 
 ## Port Fallback

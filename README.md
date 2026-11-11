@@ -59,11 +59,14 @@ curl -X POST http://localhost:38383/run \
 
 - **Zero dependencies** — plain `java.net.ServerSocket`, no web framework, no reflection hacks.
 - **Full LuaJ JSE platform** — `luajava.bindClass`, `CoerceJavaToLua`, coroutines, io, os.
+- **Classloader-aware Java bridge** — `bind("androidx.work.WorkManager")` resolves through the app's own classloader, so AndroidX + app classes work from Lua (plain `luajava.bindClass` fails on Android daemon threads).
+- **Reliable construction** — `new(clazz)` helper instantiates classes including inner classes (`Data$Builder`).
 - **Live app context** — `context`, `files`, `cache` globals pre-bound to the running app.
 - **Shell escape hatch** — `exec(cmd)` for anything Lua can't reach.
 - **Console capture** — `log(...)` streams back to the HTTP response.
 - **Port auto-fallback** — binds `:38383`, walks up if taken.
 - **Custom globals** — `configureGlobals { ... }` to inject your own APIs.
+- **Auto-deploy watcher** — `bin/watch.ts` watches `lua/` + `src/`: Lua changes POST instantly, Kotlin changes rebuild + redeploy the APK, and **state restore** re-runs `lua/init.lua` after every relaunch.
 
 ## API
 
@@ -73,7 +76,20 @@ curl -X POST http://localhost:38383/run \
 | `/status` | GET | — | same as `/` |
 | `/run` | POST | `{"script":"..."}` or raw Lua | `{"ok":true,"output":"..."}` / `{"ok":false,"error":"..."}` |
 
-Pre-bound globals: `context`, `files`, `cache`, `log(...)`, `exec(cmd)`.
+Pre-bound globals: `context`, `files`, `cache`, `log(...)`, `exec(cmd)`, `bind(name)`, `new(clazz)`.
+
+## Auto-deploy watcher
+
+```bash
+bun bin/watch.ts                # watch lua/ + src/ (defaults)
+bun bin/watch.ts --no-source    # Lua only
+bun bin/watch.ts --no-lua       # source only
+bun bin/watch.ts --lua-dir lua --host http://127.0.0.1:38383
+```
+
+- **Lua lane**: every `.lua` in `lua/` deploys on save (250ms debounce). Files starting with `_` are skipped.
+- **Source lane**: any `.kt/.java/.xml/.kts` change → `gradle assembleStandardDebug` → `adb push` → `pm install -r` → relaunch (1.5s debounce).
+- **State restore**: a rebuild kills the Lua runtime state. `lua/init.lua` runs first at watch start AND after every relaunch — write it idempotently (dedupe profiles, insert missing sources, re-link). Then the remaining `.lua` files run in order.
 
 ## Examples
 
@@ -88,8 +104,9 @@ See [examples/](examples/) for runnable scripts:
 
 - [x] HTTP server + Lua execution (`/status`, `/run`)
 - [x] Pre-bound app context + shell escape hatch
+- [x] Classloader-aware `bind()` + `new()` (AndroidX/app classes reachable)
+- [x] Auto-deploy watcher with state restore (`bin/watch.ts` + `lua/init.lua`)
 - [ ] WebSocket streaming console
-- [ ] Hot-reload file watcher (push `.lua` → auto-run)
 - [ ] Auth token support
 
 ## Contributing

@@ -138,6 +138,56 @@ object LuaJDropIn {
                 globals.set("cache", CoerceJavaToLua.coerce(ctx.cacheDir))
             }
 
+            // ── Classloader-aware Java bridge (mirrors AppLuaRunner) ──
+            // luajava.bindClass uses the DEFAULT classloader, which on an
+            // Android daemon thread is the system loader — app/AndroidX
+            // classes (WorkManager, Data$Builder, OwnTV internals) fail with
+            // ClassNotFoundException. `bind(name)` resolves through the app's
+            // own classloader so EVERY class is reachable, and `new(clazz,
+            // ...)` constructs reliably including inner classes ($Builder).
+            val appLoader = ctx?.classLoader
+            if (appLoader != null) {
+                // Make the app loader the thread context loader too, so
+                // luajava's own Class.forName (which uses TCCL) works.
+                Thread.currentThread().contextClassLoader = appLoader
+
+                globals.set("bind", object : OneArgFunction() {
+                    override fun call(name: LuaValue): LuaValue {
+                        return try {
+                            val cls = Class.forName(name.checkjstring(), true, appLoader)
+                            CoerceJavaToLua.coerce(cls)
+                        } catch (e: Throwable) {
+                            outBuf.appendLine("-- bind(${name.tojstring()}) failed: ${e.message}")
+                            LuaValue.NIL
+                        }
+                    }
+                })
+
+                globals.set("new", object : VarArgFunction() {
+                    override fun invoke(args: Varargs): Varargs {
+                        return try {
+                            val clazz = args.arg(1) as? Class<*> ?: return LuaValue.NIL
+                            val ctorArgs = (2..args.narg()).map { args.arg(it).checkjstring() }
+                            // First try no-arg, then string-arg constructors.
+                            val ctor = try {
+                                clazz.getConstructor()
+                            } catch (_: NoSuchMethodException) {
+                                clazz.getConstructor(Array(ctorArgs.size) { String::class.java })
+                            }
+                            val instance = if (ctor.parameterCount == 0) {
+                                ctor.newInstance()
+                            } else {
+                                ctor.newInstance(*ctorArgs.toTypedArray())
+                            }
+                            CoerceJavaToLua.coerce(instance)
+                        } catch (e: Throwable) {
+                            outBuf.appendLine("-- new() failed: ${e.message}")
+                            LuaValue.NIL
+                        }
+                    }
+                })
+            }
+
             // log(...)
             globals.set("log", object : VarArgFunction() {
                 override fun invoke(args: Varargs): Varargs {
